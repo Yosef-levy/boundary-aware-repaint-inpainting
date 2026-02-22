@@ -1,0 +1,12 @@
+name: bar_repaint
+
+repaint:
+  jump_every: 5
+  stop_jump_frac: 0.8
+  time_decay: True
+  
+bar:
+  p_max: 0.8
+  gamma: 2.0
+  rings: 3
+  per_component: true

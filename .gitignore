@@ -1,0 +1,84 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+.Trash-0/
+
+# =========================
+# Hydra outputs
+# =========================
+outputs/
+multirun/
+
+# Hydra runtime configs
+.hydra/
+
+# =========================
+# Logs
+# =========================
+*.log
+*.out
+
+# =========================
+# Data / models (large files)
+# =========================
+data/
+models/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# =========================
+# Scratch
+# =========================
+tmp/
+debug/
+
+# =========================
+# HuggingFace cache
+# =========================
+.cache/
+huggingface/
+
+# =========================
+# VSCode / IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Docker
+# =========================
+*.tar
+
+# =========================
+# WSL
+# =========================
+*.swp
+*.swo
