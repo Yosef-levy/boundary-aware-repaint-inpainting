@@ -32,6 +32,15 @@ RUN micromamba create -y -n repaint-bar -f /workspace/environment.yml && \
 ENV CONDA_DEFAULT_ENV=repaint-bar
 ENV PATH=/opt/micromamba/envs/repaint-bar/bin:/opt/micromamba/bin:$PATH
 
-# Install PyTorch cu128 (explicitly for my machine)
+# Install PyTorch cu128
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+    pip install --no-cache-dir \
+      torch torchvision torchaudio \
+      --index-url https://download.pytorch.org/whl/cu128
+
+# Evaluation deps (LPIPS + CelebA-HQ via HF datasets)
+RUN pip install --no-cache-dir \
+      lpips datasets
+
+# Optional sanity check (won't fail build if no GPU at build time)
+RUN python -c "import torch; print('torch:', torch.__version__); print('cuda available:', torch.cuda.is_available())"
