@@ -26,3 +26,4 @@ dependencies:
       - einops
       - rich
       - hydra-core
+      - lpips
