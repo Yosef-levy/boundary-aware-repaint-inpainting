@@ -23,6 +23,7 @@ services:
       - TQDM_DISABLE=1
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/workspace
+      - LD_LIBRARY_PATH=/opt/micromamba/envs/repaint-bar/lib
     deploy:
       resources:
         reservations:
