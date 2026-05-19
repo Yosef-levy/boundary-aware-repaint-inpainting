@@ -2,7 +2,17 @@
 
 We propose a simple yet effective modification to RePaint that conditions the resampling strategy on the distance from the mask boundary in latent space.
 
+## Abstract
+
+Image inpainting with diffusion models often produces visually plausible content, but may still suffer from noticeable artifacts near the boundary between the original image and the generated region. In this project, we study this boundary inconsistency problem in latent diffusion inpainting and propose BAR-RePaint, a boundary-aware variant of our latent-space RePaint procedure. Instead of applying the same resampling behavior uniformly across the masked region, BAR-RePaint emphasizes regions close to the mask boundary, where seam artifacts are most visually apparent.
+
+We compare standard latent inpainting, latent RePaint, and BAR-RePaint using both perceptual and boundary-focused evaluation metrics. In addition to LPIPS, PSNR, SSIM, and FID, we evaluate seam-specific measures designed to capture discontinuities across the mask boundary. We further analyze correlations between these metrics in order to understand whether common global image-quality metrics reflect boundary quality in inpainting outputs.
+
+Our experiments show that boundary-aware resampling provides a useful framework for studying the trade-off between global image fidelity and local seam consistency. The final results indicate that [TODO: insert main quantitative finding once metrics are available]. These findings suggest that evaluating inpainting methods requires both global perceptual metrics and localized boundary-aware measurements.
+
 ## Introduction
+
+Image inpainting aims to complete missing regions in an image while preserving both visual realism and consistency with the surrounding known content. In diffusion-based inpainting, this task is especially challenging near the boundary between the known and generated regions: even when the completed content appears plausible, small discontinuities in color, texture, or structure along the mask border can make the edit visually noticeable. Therefore, improving the transition across the mask boundary is a central concern for practical inpainting quality.
 
 Diffusion-based image inpainting has recently advanced through algorithmic modifications of the sampling process rather than retraining dedicated models. A prominent example is **RePaint**<sup>[1]</sup>, which reformulates inpainting as a constrained reverse diffusion problem by enforcing known pixels at every timestep and introducing stochastic jump-and-resample operations along the diffusion timeline. This approach demonstrated that reintroducing stochasticity at later stages of sampling is crucial for achieving global semantic consistency, particularly for large or irregular masks. However, RePaint was originally developed for pixel-space DDPMs and requires explicit manipulation of the diffusion schedule, making direct integration with latent diffusion models such as Stable Diffusion nontrivial.
 
