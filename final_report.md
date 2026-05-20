@@ -83,8 +83,21 @@ The motivation is that different parts of the masked region play different roles
 
 Initially, it was unclear whether boundary regions should receive stronger or weaker resampling. Stronger resampling near the boundary could potentially help the generated content better adapt to the surrounding context, but it could also introduce additional stochastic variation exactly where visual consistency is most important. In preliminary experiments, we observed better SEAM and LPIPS scores when the resampling strength was reduced near the boundary, reaching `p = 0` at the boundary itself, and increased gradually toward the interior of the mask. BAR-RePaint therefore follows this empirical design choice: it suppresses stochasticity at the seam while allowing stronger latent exploration deeper inside the generated region.
 
-
 ### Boundary-Aware Resampling Schedule
+
+The boundary-aware schedule is constructed from the binary inpainting mask. First, the mask is converted into a fill-region tensor, where masked pixels are assigned value 1 and preserved pixels are assigned value 0. A distance transform is then computed inside the fill region, assigning each masked pixel a distance from the nearest non-masked pixel. The resulting distance map is normalized to the range `[0, 1]`, where values close to 0 correspond to locations near the boundary and values close to 1 correspond to locations deeper inside the mask.
+
+For images with multiple disconnected masked regions, the distance map is normalized separately for each connected component. This prevents small masked regions from receiving artificially low resampling weights merely because another, larger masked region has a greater maximum distance from its boundary.
+
+The distance map is resized to the latent resolution and optionally quantized into a fixed number of concentric rings. The final spatial resampling weight is computed using a power-law schedule:
+
+```text
+w = p_max * D^gamma
+```
+where `D` is the normalized distance-to-boundary value, `p_max` is the maximum resampling strength, and `gamma` controls how sharply the resampling strength increases away from the boundary. Larger values of `gamma` suppress resampling more strongly near the boundary while preserving higher stochasticity in the interior.
+
+During inference, BAR-RePaint applies the same temporal logic as the latent RePaint baseline: resampling is performed every `jump_every` steps, disabled after `stop_jump_frac` of the denoising trajectory, and optionally decayed over time. The difference is that the scalar interpolation strength `p` is replaced by the spatial weight map `w`, so the latent update becomes boundary-aware rather than uniform across the entire mask.
+
 
 ## Experimental Setup
 
