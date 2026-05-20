@@ -102,9 +102,40 @@ During inference, BAR-RePaint applies the same temporal logic as the latent RePa
 ## Experimental Setup
 
 ### Model and Data
+
+All experiments were conducted using the Stable Diffusion 2 inpainting model (`sd2-community/stable-diffusion-2-inpainting`). The model operates in latent space and receives three inputs: an RGB image, a binary inpainting mask, and a text prompt. All images and masks were resized to `512 x 512` before inference. Masks follow the standard diffusers convention, where white pixels indicate the region to regenerate and black pixels indicate the region to preserve.
+
+For the main quantitative evaluation, we used images from the CelebA-HQ dataset (`korexyz/celeba-hq-256x256`). Each image was resized to `512 x 512` and evaluated under several mask types in order to test different inpainting scenarios. The mask set includes a centered square mask, a half-image mask, and a random brush-stroke mask. This gives both regular geometric masks and more irregular masks that better resemble free-form editing.
+
+The input to the inpainting pipeline was created by removing the masked region from the original image while keeping the unmasked context unchanged. The original image was used only as the reference image for evaluation metrics.
+
+TODO: Insert final number of evaluated images and total generated samples once the metric run is finalized.
+
 ### Compared Methods
+
+We compare three inference-time variants built on the same Stable Diffusion 2 inpainting model: the standard inpainting pipeline, a latent-space RePaint baseline, and our proposed BAR-RePaint method. All methods are evaluated using the same images, masks, prompts and resolution, so the comparison focuses on the effect of the resampling strategy.
+
 ### Hyperparameter Sweep
+
+Before the final evaluation, we performed a hyperparameter sweep over the resampling parameters in order to identify stable settings for latent RePaint and BAR-RePaint. The sweep varied the resampling frequency (`jump_every`), the resampling strength (`p` for latent RePaint and `p_max` for BAR-RePaint), the stopping point for resampling (`stop_jump_frac`), and whether the resampling strength decays over time.
+
+For BAR-RePaint, the sweep also varied the boundary-aware parameters: the distance decay exponent (`gamma`) and the number of distance rings (`rings`). These parameters control how resampling strength changes with distance from the mask boundary.
+
+The preliminary sweep was evaluated mainly with boundary-focused seam metrics, since its purpose was to select configurations that improve local consistency near the mask boundary. The selected configuration was then used for the broader metric evaluation.
+
+TODO: Insert the final selected parameters for latent RePaint and BAR-RePaint.
+
 ### Evaluation Metrics
+
+We evaluate the generated images using both global image-quality metrics and boundary-focused seam metrics. This distinction is important because inpainting failures are often local: an image may receive a good global score while still containing visible artifacts near the mask boundary.
+
+For perceptual similarity, we use LPIPS, where lower values indicate better perceptual agreement with the reference image. For pixel-level fidelity, we use PSNR, where higher values indicate smaller reconstruction error. We also report SSIM, where higher values indicate stronger structural similarity. These metrics are computed against the original unmasked image and are reported for relevant regions such as the full image and the masked hole.
+
+To evaluate distribution-level realism, we use FID. Unlike LPIPS, PSNR, and SSIM, FID is computed over a set of generated images rather than on individual samples. Lower FID indicates that the distribution of generated images is closer to the distribution of real reference images.
+
+In addition, we use seam-specific metrics designed to measure boundary artifacts directly. These include gradient discontinuity across the mask boundary, color difference between inner and outer boundary bands, and total variation in a narrow band around the seam. Lower values for these seam metrics indicate smoother and more consistent transitions between generated and preserved regions.
+
+Finally, we analyze correlations between the metrics in order to test whether standard global metrics agree with boundary-focused measurements. This helps determine whether improvements in seam quality are reflected by common image-quality metrics, or whether boundary-aware evaluation provides complementary information.
 
 ## Results
 
