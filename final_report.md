@@ -4,7 +4,7 @@ We propose a simple yet effective modification to RePaint that conditions the re
 
 ## Abstract
 
-Image inpainting with diffusion models often produces visually plausible content, but may still suffer from noticeable artifacts near the boundary between the original image and the generated region. In this project, we study this boundary inconsistency problem in latent diffusion inpainting and propose BAR-RePaint, a boundary-aware variant of our latent-space RePaint procedure. Instead of applying the same resampling behavior uniformly across the masked region, BAR-RePaint emphasizes regions close to the mask boundary, where seam artifacts are most visually apparent.
+Image inpainting with diffusion models often produces visually plausible content, but may still suffer from noticeable artifacts near the boundary between the original image and the generated region. In this project, we study this boundary inconsistency problem in latent diffusion inpainting and propose BAR-RePaint, a boundary-aware variant of our latent-space RePaint procedure. Instead of applying the same resampling behavior uniformly across the masked region, BAR-RePaint modulates resampling according to distance from the mask boundary, suppressing stochasticity near the boundary while allowing stronger exploration inside the masked region.
 
 We compare standard latent inpainting, latent RePaint, and BAR-RePaint using both perceptual and boundary-focused evaluation metrics. In addition to LPIPS, PSNR, SSIM, and FID, we evaluate seam-specific measures designed to capture discontinuities across the mask boundary. We further analyze correlations between these metrics in order to understand whether common global image-quality metrics reflect boundary quality in inpainting outputs.
 
@@ -62,8 +62,28 @@ This motivates boundary-aware evaluation and sampling strategies. Instead of tre
 ## Method
 
 ### Stable Diffusion Inpainting Baseline
+
+Our first baseline is the standard Stable Diffusion 2 inpainting pipeline. The model receives an RGB input image, a binary inpainting mask, and a text prompt. The mask follows the convention that white pixels indicate the region to be regenerated, while black pixels indicate the region to preserve. During inference, the pipeline encodes the image into the latent space, performs the denoising process conditioned on the prompt and masked image, and decodes the final latent representation back into image space.
+
+This baseline does not modify the sampling trajectory and does not introduce additional resampling operations. It therefore represents the default behavior of the pretrained latent diffusion inpainting model. We use it as a reference point for evaluating whether latent resampling improves boundary consistency or perceptual quality.
+
 ### Latent RePaint Baseline
+
+The second baseline is a RePaint-inspired latent resampling method. Unlike the original RePaint algorithm, which operates in pixel space and modifies the diffusion schedule through explicit jumps between timesteps, our implementation operates inside the latent space of Stable Diffusion and keeps the original scheduler unchanged.
+
+At fixed intervals during inference, the current latent representation is partially re-noised at the current diffusion timestep. The re-noised latent is then blended back only inside the masked region. Formally, if `z_t` is the current latent and `z_t^noise` is the same latent after adding scheduler noise, the update inside the mask is an interpolation between the two states. The interpolation strength is controlled by a scalar parameter `p`.
+
+To avoid destabilizing the final denoising steps, resampling is applied only during an early portion of the sampling trajectory. In addition, the resampling strength can decay over time, so that stochastic exploration is stronger in earlier denoising steps and weaker near the end of generation. This produces a latent-space analogue of RePaint-style repeated refinement while remaining compatible with the Stable Diffusion inpainting pipeline.
+
 ### Boundary-Aware Latent RePaint (BAR-RePaint)
+
+BAR-RePaint extends the latent RePaint baseline by replacing the uniform resampling strength with a spatially varying resampling map. Instead of applying the same amount of stochasticity to every masked latent location, the method assigns a different resampling strength according to the distance from the mask boundary.
+
+The motivation is that different parts of the masked region play different roles in inpainting. Latent locations near the boundary must remain compatible with the known image context, since visible seam artifacts usually appear at the transition between original and generated content, while locations deeper inside the masked region can tolerate more stochastic exploration, because they are less directly constrained by neighboring known pixels.
+
+Initially, it was unclear whether boundary regions should receive stronger or weaker resampling. Stronger resampling near the boundary could potentially help the generated content better adapt to the surrounding context, but it could also introduce additional stochastic variation exactly where visual consistency is most important. In preliminary experiments, we observed better SEAM and LPIPS scores when the resampling strength was reduced near the boundary, reaching `p = 0` at the boundary itself, and increased gradually toward the interior of the mask. BAR-RePaint therefore follows this empirical design choice: it suppresses stochasticity at the seam while allowing stronger latent exploration deeper inside the generated region.
+
+
 ### Boundary-Aware Resampling Schedule
 
 ## Experimental Setup
