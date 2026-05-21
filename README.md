@@ -1,213 +1,172 @@
-# RePaint-BAR
+# Boundary-Aware RePaint
 
-Stable Diffusion 2 Inpainting with RePaint and Boundary-Aware Resampling
-(BAR-RePaint)
-
-------------------------------------------------------------------------
+Stable Diffusion 2 inpainting with RePaint-style latent resampling and
+Boundary-Aware RePaint (BAR-RePaint).
 
 ## Overview
 
-This project implements Stable Diffusion 2 inpainting with optional
-latent resampling strategies:
+This project compares three inference-time inpainting methods:
 
--   **baseline** -- Standard diffusers inpainting.
--   **repaint** -- RePaint-like uniform latent resampling.
--   **bar_repaint** -- Boundary-Aware RePaint (distance-to-boundary
-    modulated resampling).
+- `baseline`: standard Stable Diffusion 2 inpainting.
+- `repaint`: uniform RePaint-like latent resampling inside the mask.
+- `bar_repaint`: boundary-aware latent resampling, where resampling strength
+  increases with distance from the mask boundary.
 
-All experiments are configured via **Hydra** and executed inside a
-**Docker container with GPU support**.
-
-------------------------------------------------------------------------
+The core implementation is in `src/run_inpaint.py` and
+`src/samplers/latent_resample.py`. CelebA-HQ evaluation scripts are provided in
+`src/eval_*_celebhq.py`.
 
 ## Requirements
 
-You need:
+- NVIDIA GPU
+- NVIDIA driver
+- Docker
+- NVIDIA Container Toolkit
+- HuggingFace access token with access to the Stable Diffusion 2 inpainting
+  model
 
--   NVIDIA GPU\
--   NVIDIA driver installed\
--   Docker\
--   NVIDIA Container Toolkit (for GPU inside Docker)
+Verify Docker GPU access:
 
-------------------------------------------------------------------------
-
-# Option A --- Ubuntu (Recommended)
-
-## 1. Verify GPU
-
-``` bash
-nvidia-smi
-```
-
-Then test Docker GPU access:
-
-``` bash
+```bash
 docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
 ```
 
-If this works, you are ready.
+## Setup
 
-------------------------------------------------------------------------
+If using the submitted zip, enter the `code/` directory first:
 
-## 2. Extract the project
-
-``` bash
-unzip repaint-bar.zip
-cd repaint-bar
+```bash
+unzip <id1>-<id2>.zip
+cd <id1>-<id2>/code
 ```
 
-------------------------------------------------------------------------
+If using the repository directly, run the commands from the repository root.
 
-## 3. Login to HuggingFace (Required Once)
+Create a local `.env` file with your HuggingFace token:
 
-Stable Diffusion weights are downloaded from HuggingFace.
-
-``` bash
-pip install huggingface_hub
-huggingface-cli login
+```bash
+echo "HF_TOKEN=<your_huggingface_token>" > .env
 ```
 
-Paste your access token.
+Then build and start the container:
 
-------------------------------------------------------------------------
-
-## 4. Build and Run
-
-``` bash
+```bash
 docker compose up --build
 ```
 
-The first build may take several minutes.
+The first build can take several minutes. When the container is running, open:
 
-------------------------------------------------------------------------
-
-## 5. Open Jupyter
-
-Open in browser:
-
-    http://localhost:8888
-
-Open:
-
-    notebooks/Tests.ipynb
-
-Run all cells.
-
-------------------------------------------------------------------------
-
-# Option B --- Windows 11 + WSL2
-
-## 1. Install
-
--   NVIDIA Driver\
--   Docker Desktop\
--   Enable WSL2 backend\
--   Enable GPU support
-
-Verify:
-
-``` bash
-docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi
+```text
+http://localhost:8888
 ```
 
-------------------------------------------------------------------------
+Then open `notebooks/Tests.ipynb` in Jupyter.
 
-## 2. Extract inside WSL
+## Run a Single Inpainting Example
 
-``` bash
-unzip repaint-bar.zip
-cd repaint-bar
+The single-image CLI uses Hydra configs. The default data config expects:
+
+```text
+data/input.png
+data/mask.png
 ```
 
-------------------------------------------------------------------------
+The mask convention is:
 
-## 3. Login to HuggingFace
-
-``` bash
-huggingface-cli login
+```text
+white = fill / regenerate
+black = keep / preserve
 ```
 
-------------------------------------------------------------------------
+You can either place files at the default paths or override them:
 
-## 4. Build and Run
-
-``` bash
-docker compose up --build
+```bash
+python -m src.run_inpaint \
+  data.input_path=/path/to/image.png \
+  data.mask_path=/path/to/mask.png
 ```
 
-Open:
+Run the three methods:
 
-    http://localhost:8888
+```bash
+python -m src.run_inpaint sampler=baseline \
+  data.input_path=/path/to/image.png \
+  data.mask_path=/path/to/mask.png
 
-------------------------------------------------------------------------
+python -m src.run_inpaint sampler=repaint \
+  data.input_path=/path/to/image.png \
+  data.mask_path=/path/to/mask.png
 
-# Running Experiments from CLI
-
-Inside the container:
-
-Baseline:
-
-``` bash
-python -m src.run_inpaint
+python -m src.run_inpaint sampler=bar_repaint \
+  data.input_path=/path/to/image.png \
+  data.mask_path=/path/to/mask.png
 ```
 
-RePaint:
+Outputs are written by Hydra under:
 
-``` bash
-python -m src.run_inpaint sampler=repaint
+```text
+outputs/<date>/<time>/
 ```
 
-BAR-RePaint:
+Each run stores `result.png`, `input_used.png`, `mask_used.png`, and the Hydra
+configuration for that run.
 
-``` bash
-python -m src.run_inpaint sampler=bar_repaint
+## Run CelebA-HQ Evaluation
+
+The quantitative evaluation scripts download CelebA-HQ from HuggingFace
+(`korexyz/celeba-hq-256x256`) and evaluate 100 images using center, half-image,
+and random brush masks.
+
+Run all metrics:
+
+```bash
+python scripts/run_all_metrics.py
 ```
 
-Override parameters:
+Or run individual metrics:
 
-``` bash
-python -m src.run_inpaint run.prompt="a red apple"
-python -m src.run_inpaint sampler=bar_repaint sampler.bar.p_max=0.8
-python -m src.run_inpaint run.compile_unet=true
-python -m src.run_inpaint run.seed=123
+```bash
+python -m src.eval_lpips_celebhq
+python -m src.eval_psnr_celebhq
+python -m src.eval_ssim_celebhq
+python -m src.eval_fid_celebhq
 ```
 
-Outputs are saved under:
+The metric scripts write:
 
-    outputs/<date>/<time>/
+```text
+eval_lpips_results.csv
+eval_psnr_results.csv
+eval_ssim_results.csv
+eval_fid_results.csv
+```
 
-Each run stores: - result.png\
-- input_used.png\
-- mask_used.png\
-- full Hydra config
+To summarize and rank the metric CSVs:
 
-------------------------------------------------------------------------
+```bash
+python scripts/analyze_metric_results.py \
+  --inputs eval_ssim_results.csv eval_lpips_results.csv eval_psnr_results.csv eval_fid_results.csv \
+  --out-dir metric_analysis
+```
 
-# Project Structure
+The report tables were produced from the summarized metric CSVs.
 
-    configs/        Hydra configuration files
-    data/           Example input image and mask
-    models/         (empty; reserved for future use)
-    notebooks/      Jupyter notebooks (Tests.ipynb)
-    outputs/        Experiment outputs
-    src/            Core implementation
-    scripts/        Utility scripts
-    Dockerfile      Container definition
-    docker-compose.yml
-    environment.yml
+## Project Structure
 
-------------------------------------------------------------------------
+```text
+configs/        Hydra configuration files
+src/            Core implementation and evaluation scripts
+scripts/        Evaluation/analysis helper scripts
+notebooks/      Jupyter notebook and saved metric CSVs
+Dockerfile      GPU container definition
+docker-compose.yml
+environment.yml
+```
 
-# Notes
+## Notes
 
--   Default precision is controlled via config (`fp16`, `bf16`, or
-    `fp32`).
--   `run.compile_unet=true` enables torch.compile (optional).
--   Mask convention: **white = fill**, **black = keep**.
--   Image and mask are resized to the configured resolution.
--   If GPU is not detected inside Docker, verify NVIDIA Container
-    Toolkit installation.
-
-------------------------------------------------------------------------
-
-End of README.
+- The default model is `sd2-community/stable-diffusion-2-inpainting`.
+- The default image resolution is `512 x 512`.
+- The default precision is `bf16`; it can be changed in `configs/config.yaml`.
+- Generated outputs, model weights, caches, and local data are intentionally not
+  included in the submission.
