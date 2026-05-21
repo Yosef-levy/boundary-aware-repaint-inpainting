@@ -1,0 +1,2 @@
+hf_model_id: "sd2-community/stable-diffusion-2-inpainting"
+enable_xformers: False

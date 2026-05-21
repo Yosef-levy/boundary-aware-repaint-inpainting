@@ -1,0 +1,14 @@
+The following files are evaluation and analysis utilities rather than the core
+method implementation. We list them here for exclusion from automatic checks for
+internet or AI use, as allowed by the submission instructions.
+
+code/src/eval_helpers.py
+code/src/eval_lpips_celebhq.py
+code/src/eval_psnr_celebhq.py
+code/src/eval_ssim_celebhq.py
+code/src/eval_fid_celebhq.py
+
+code/scripts/analyze_metric_results.py
+code/scripts/plot_metric_results.py
+code/scripts/run_all_metrics.py
+code/scripts/smoke_test_gpu.py

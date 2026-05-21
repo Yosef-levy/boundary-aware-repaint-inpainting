@@ -1,0 +1,7 @@
+name: repaint
+
+repaint:
+  jump_every: 5
+  p: 0.35
+  stop_jump_frac: 0.4
+  time_decay: True
