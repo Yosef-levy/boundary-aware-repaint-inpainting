@@ -6,9 +6,9 @@ We propose a simple yet effective modification to RePaint that conditions the re
 
 Image inpainting with diffusion models often produces visually plausible content, but may still suffer from noticeable artifacts near the boundary between the original image and the generated region. In this project, we study this boundary inconsistency problem in latent diffusion inpainting and propose BAR-RePaint, a boundary-aware variant of our latent-space RePaint procedure. Instead of applying the same resampling behavior uniformly across the masked region, BAR-RePaint modulates resampling according to distance from the mask boundary, suppressing stochasticity near the boundary while allowing stronger exploration inside the masked region.
 
-We compare standard latent inpainting, latent RePaint, and BAR-RePaint using both perceptual and boundary-focused evaluation metrics. In addition to LPIPS, PSNR, SSIM, and FID, we evaluate seam-specific measures designed to capture discontinuities across the mask boundary. We further analyze correlations between these metrics in order to understand whether common global image-quality metrics reflect boundary quality in inpainting outputs.
+We compare standard latent inpainting, latent RePaint, and BAR-RePaint on CelebA-HQ using LPIPS, PSNR, SSIM, and FID. We also use a smaller custom image and mask set for exploratory hyperparameter analysis with boundary-focused seam metrics, and analyze metric correlations to understand where the evaluation criteria agree or disagree.
 
-Our experiments show that boundary-aware resampling provides a useful framework for studying the trade-off between global image fidelity and local seam consistency. The final results indicate that [TODO: insert main quantitative finding once metrics are available]. These findings suggest that evaluating inpainting methods requires both global perceptual metrics and localized boundary-aware measurements.
+Our experiments show that BAR-RePaint improves some fidelity and structure metrics, especially on larger masks, but is not universally better. In the final CelebA-HQ evaluation, it achieves the best aggregate FID and the best PSNR and SSIM on two of the three mask types, while the standard Stable Diffusion inpainting baseline remains strongest according to LPIPS. The results suggest that mask geometry matters for latent diffusion inpainting, and that resampling strength must be controlled carefully to avoid making outputs worse.
 
 ## Introduction
 
@@ -71,7 +71,7 @@ This baseline does not modify the sampling trajectory and does not introduce add
 
 The second baseline is a RePaint-inspired latent resampling method. Unlike the original RePaint algorithm, which operates in pixel space and modifies the diffusion schedule through explicit jumps between timesteps, our implementation operates inside the latent space of Stable Diffusion and keeps the original scheduler unchanged.
 
-At fixed intervals during inference, the current latent representation is partially re-noised at the current diffusion timestep. The re-noised latent is then blended back only inside the masked region. Formally, if `z_t` is the current latent and `z_t^noise` is the same latent after adding scheduler noise, the update inside the mask is an interpolation between the two states. The interpolation strength is controlled by a scalar parameter `p`.
+At fixed intervals during inference, the current latent representation is partially re-noised at the current diffusion timestep. The re-noised latent is then blended back only inside the masked region. Formally, if $z_t$ is the current latent and $z_t^{noise}$ is the same latent after adding scheduler noise, the update inside the mask is an interpolation between the two states. The interpolation strength is controlled by a scalar parameter `p`.
 
 To avoid destabilizing the final denoising steps, resampling is applied only during an early portion of the sampling trajectory. In addition, the resampling strength can decay over time, so that stochastic exploration is stronger in earlier denoising steps and weaker near the end of generation. This produces a latent-space analogue of RePaint-style repeated refinement while remaining compatible with the Stable Diffusion inpainting pipeline.
 
@@ -81,7 +81,7 @@ BAR-RePaint extends the latent RePaint baseline by replacing the uniform resampl
 
 The motivation is that different parts of the masked region play different roles in inpainting. Latent locations near the boundary must remain compatible with the known image context, since visible seam artifacts usually appear at the transition between original and generated content, while locations deeper inside the masked region can tolerate more stochastic exploration, because they are less directly constrained by neighboring known pixels.
 
-Initially, it was unclear whether boundary regions should receive stronger or weaker resampling. Stronger resampling near the boundary could potentially help the generated content better adapt to the surrounding context, but it could also introduce additional stochastic variation exactly where visual consistency is most important. In preliminary experiments, we observed better SEAM and LPIPS scores when the resampling strength was reduced near the boundary, reaching `p = 0` at the boundary itself, and increased gradually toward the interior of the mask. BAR-RePaint therefore follows this empirical design choice: it suppresses stochasticity at the seam while allowing stronger latent exploration deeper inside the generated region.
+Initially, it was unclear whether boundary regions should receive stronger or weaker resampling. Stronger resampling near the boundary could potentially help the generated content better adapt to the surrounding context, but it could also introduce additional stochastic variation exactly where visual consistency is most important. In preliminary experiments, we observed better seam and LPIPS scores when the resampling strength was reduced near the boundary, reaching `p = 0` at the boundary itself, and increased gradually toward the interior of the mask. BAR-RePaint therefore follows this empirical design choice: it suppresses stochasticity at the seam while allowing stronger latent exploration deeper inside the generated region.
 
 ### Boundary-Aware Resampling Schedule
 
@@ -105,11 +105,11 @@ During inference, BAR-RePaint applies the same temporal logic as the latent RePa
 
 All experiments were conducted using the Stable Diffusion 2 inpainting model (`sd2-community/stable-diffusion-2-inpainting`). The model operates in latent space and receives three inputs: an RGB image, a binary inpainting mask, and a text prompt. All images and masks were resized to `512 x 512` before inference. Masks follow the standard diffusers convention, where white pixels indicate the region to regenerate and black pixels indicate the region to preserve.
 
-For the main quantitative evaluation, we used images from the CelebA-HQ dataset (`korexyz/celeba-hq-256x256`). Each image was resized to `512 x 512` and evaluated under several mask types in order to test different inpainting scenarios. The mask set includes a centered square mask, a half-image mask, and a random brush-stroke mask. This gives both regular geometric masks and more irregular masks that better resemble free-form editing.
+We used two image sources. For the main controlled quantitative evaluation, we used images from the CelebA-HQ dataset (`korexyz/celeba-hq-256x256`). Each image was resized to `512 x 512` and evaluated under several mask types in order to test different inpainting scenarios. The mask set includes a centered square mask, a half-image mask, and a random brush-stroke mask. This gives both regular geometric masks and more irregular masks that better resemble free-form editing.
 
 The input to the inpainting pipeline was created by removing the masked region from the original image while keeping the unmasked context unchanged. The original image was used only as the reference image for evaluation metrics.
 
-TODO: Insert final number of evaluated images and total generated samples once the metric run is finalized.
+The input to the inpainting pipeline was created by removing the masked region from the original image while keeping the unmasked context unchanged. The original image was used only as the reference image for evaluation metrics. The final CelebA-HQ evaluation uses an empty prompt and empty negative prompt, 50 denoising steps, and guidance scale 1.0. It uses 100 CelebA-HQ images, three mask types, and three compared methods, for a total of 900 generated images for LPIPS, PSNR, and SSIM. FID is computed per method and mask type over 100 generated images, and also over all 300 generated images per method.
 
 ### Compared Methods
 
@@ -123,91 +123,127 @@ For BAR-RePaint, the sweep also varied the boundary-aware parameters: the distan
 
 The preliminary sweep was evaluated mainly with boundary-focused seam metrics, since its purpose was to select configurations that improve local consistency near the mask boundary. The selected configuration was then used for the broader metric evaluation.
 
-TODO: Insert the final selected parameters for latent RePaint and BAR-RePaint.
+The final CelebA-HQ evaluation uses one fixed setting per resampling method. For the latent RePaint baseline, the final configuration uses `jump_every = 5`, `p = 0.35`, `stop_jump_frac = 0.4`, and temporal decay enabled. For BAR-RePaint, the final configuration uses `jump_every = 5`, `stop_jump_frac = 0.8`, temporal decay enabled, `p_max = 0.8`, `gamma = 2.0`, `rings = 3`, and per-component distance normalization enabled.
 
 ### Evaluation Metrics
 
-We evaluate the generated images using both global image-quality metrics and boundary-focused seam metrics. This distinction is important because inpainting failures are often local: an image may receive a good global score while still containing visible artifacts near the mask boundary.
+We evaluate the generated images using global and region-specific image-quality metrics. This distinction is important because inpainting failures are often local: an image may receive a good global score while still containing visible artifacts near the mask boundary or inside the generated hole.
 
 For perceptual similarity, we use LPIPS, where lower values indicate better perceptual agreement with the reference image. For pixel-level fidelity, we use PSNR, where higher values indicate smaller reconstruction error. We also report SSIM, where higher values indicate stronger structural similarity. These metrics are computed against the original unmasked image and are reported for relevant regions such as the full image and the masked hole.
 
 To evaluate distribution-level realism, we use FID. Unlike LPIPS, PSNR, and SSIM, FID is computed over a set of generated images rather than on individual samples. Lower FID indicates that the distribution of generated images is closer to the distribution of real reference images.
 
-In addition, we use seam-specific metrics designed to measure boundary artifacts directly. These include gradient discontinuity across the mask boundary, color difference between inner and outer boundary bands, and total variation in a narrow band around the seam. Lower values for these seam metrics indicate smoother and more consistent transitions between generated and preserved regions.
+In the preliminary sweep, we also used seam-specific metrics designed to measure boundary artifacts directly. These include gradient discontinuity across the mask boundary, color difference between inner and outer boundary bands, and total variation in a narrow band around the seam. Lower values for these seam metrics indicate smoother and more consistent transitions between generated and preserved regions. In the final quantitative comparison below, we report LPIPS, PSNR, SSIM, and FID.
 
-Finally, we analyze correlations between the metrics in order to test whether standard global metrics agree with boundary-focused measurements. This helps determine whether improvements in seam quality are reflected by common image-quality metrics, or whether boundary-aware evaluation provides complementary information.
+Finally, we analyze correlations between LPIPS, PSNR, and SSIM in order to test whether the reference-based metrics agree with one another. This helps determine whether a single metric is sufficient to characterize inpainting quality, or whether different metrics emphasize different aspects of the generated result.
 
 ## Results
 
+### Exploratory Sweep on Custom Images
+
+Before the final CelebA-HQ evaluation, we ran a larger exploratory sweep on the custom image set to study how the resampling parameters affect boundary quality. This sweep used 20 images, 6 masks, and 3 random seeds. For each generated sample, we computed seam gradient gap, Lab color gap across the boundary, total variation in a narrow seam band, edge-density gap, and LPIPS. Lower values are better for all metrics in this sweep.
+
+The sweep produced 360 baseline samples, 14,040 latent RePaint samples, and 21,600 BAR-RePaint samples. Averaged across all configurations in each method family, BAR-RePaint produced lower seam gradient gap, lower Lab color gap, lower edge-density gap, and lower LPIPS than the baseline and the full set of latent RePaint configurations:
+
+| Method family | Samples | Seam grad ↓ | Color gap ↓ | TV band ↓ | Edge gap ↓ | LPIPS masked ↓ |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline | 360 | 0.0191 | 2.6178 | 0.0573 | 0.0272 | 0.0868 |
+| RePaint sweep | 14,040 | 0.0191 | 2.6713 | **0.0569** | 0.0276 | 0.0875 |
+| BAR-RePaint sweep | 21,600 | **0.0180** | **2.6113** | 0.0570 | **0.0264** | **0.0864** |
+
+These family-level averages should be interpreted as robustness indicators rather than as a formal benchmark. The custom image set is small and non-standard, and the baseline has only one configuration while RePaint and BAR-RePaint include many parameter settings, some of which are intentionally poor exploratory choices. Therefore, a bad average for the RePaint sweep does not mean that every RePaint setting is poor; it means the method is sensitive to hyperparameters. Conversely, BAR-RePaint having the best family average suggests that the boundary-aware weighting makes the sweep more robust on average.
+
+The best individual configurations in the sweep used relatively mild resampling. The strongest seam-gradient and color-gap setting was latent RePaint with `jump_every = 4`, `p = 0.15`, `stop_jump_frac = 0.533`, and temporal decay enabled, with seam gradient gap 0.0135 and color gap 2.5385. The best masked LPIPS setting was latent RePaint with `jump_every = 4`, `p = 0.13`, `stop_jump_frac = 0.4`, and temporal decay enabled, with masked LPIPS 0.0843. The best BAR-RePaint setting by masked LPIPS used `jump_every = 4`, `p_max = 0.278`, `gamma = 1.008`, `rings = 1`, `stop_jump_frac = 0.4`, and temporal decay enabled, with masked LPIPS 0.0847.
+
+These results support two conclusions for our exploratory setting. First, the most stable settings are not the most aggressive ones: small amounts of re-noising are usually preferable for preserving seam consistency. Second, the boundary-aware formulation is useful as a robust family of configurations, even when the single best exploratory setting for a specific metric is sometimes a low-strength uniform RePaint configuration.
+
+The sweep also exposes an important failure mode. Across the full latent RePaint sweep, the average color gap, edge-density gap, and masked LPIPS are worse than the baseline, even though the best individual RePaint settings are strong. This means that resampling is not automatically helpful: when the strength is too high, applied too late, or applied uniformly near the boundary, it can add visible seam variation and degrade perceptual similarity. BAR-RePaint reduces this risk on average, but it does not eliminate it.
+
 ### Quantitative Comparison
+
+The final CelebA-HQ comparison uses the fixed configurations described in the experimental setup. Table 1 reports the main hole-region metrics for each mask type. The hole region is the most direct reconstruction target because it measures only the pixels regenerated by the inpainting model.
+
+| Mask | Method | LPIPS hole ↓ | PSNR hole ↑ | SSIM hole ↑ |
+|---|---:|---:|---:|---:|
+| Brush | Baseline | **0.041** | 22.319 | 0.663 |
+| Brush | RePaint | 0.059 | **23.704** | **0.723** |
+| Brush | BAR-RePaint | 0.044 | 23.590 | 0.705 |
+| Center | Baseline | **0.046** | 18.623 | 0.587 |
+| Center | RePaint | 0.088 | 18.389 | 0.663 |
+| Center | BAR-RePaint | 0.055 | **19.518** | **0.664** |
+| Half | Baseline | **0.284** | 10.697 | 0.337 |
+| Half | RePaint | 0.416 | 11.431 | 0.495 |
+| Half | BAR-RePaint | 0.366 | **11.950** | **0.503** |
+
+The results show a clear split between metrics. The standard Stable Diffusion inpainting baseline obtains the best LPIPS for all three mask types, suggesting that the pretrained pipeline remains strong under perceptual-feature similarity to the reference image. However, BAR-RePaint improves PSNR and SSIM for the center and half-image masks, and is very close to latent RePaint on the brush mask. This suggests that boundary-aware resampling can improve pixel and structural agreement in the generated hole, especially when the missing region is large enough to benefit from interior exploration.
+
+Latent RePaint performs best on PSNR and SSIM for the brush mask, but performs worse than BAR-RePaint for center and half masks. This supports the intuition behind BAR-RePaint: uniform resampling can help irregular masks, but for larger masks it may add too much stochasticity near the preserved context. Modulating resampling by distance from the boundary reduces this effect.
+
+It is important, however, not to overstate the half-mask numbers. BAR-RePaint improves half-mask PSNR from 10.70 to 11.95 and SSIM from 0.337 to 0.503, but these values are still low in absolute terms. The metric improvement means the output is closer to the reference than the baseline under pixel and structural measures; it does not mean the half-face completion is visually successful. This matches the qualitative examples, where half-mask outputs often fail identity and facial coherence even when PSNR and SSIM improve.
+
+Table 2 reports FID. Because FID is computed over generated image sets rather than per image, it is reported once per method and mask type.
+
+| Mask | Baseline ↓ | RePaint ↓ | BAR-RePaint ↓ |
+|---|---:|---:|---:|
+| Brush | 21.38 | 32.40 | **21.25** |
+| Center | **26.38** | 75.49 | 36.30 |
+| Half | 112.31 | 120.60 | **89.05** |
+| All masks | 44.73 | 61.82 | **39.68** |
+
+BAR-RePaint achieves the best aggregate FID across all masks, with an overall FID of 39.68 compared to 44.73 for the baseline and 61.82 for latent RePaint. BAR-RePaint also gives the best FID for brush and half masks, while the baseline remains best for the center mask. The poor FID of uniform latent RePaint, especially for the center mask, indicates that naive latent re-noising can move samples away from the real-image distribution even when some reconstruction metrics improve. Since each per-mask FID is computed from 100 generated images, these FID values should be treated as comparative trends within this experiment rather than precise estimates of real-world distribution quality.
+
 ### Metric Correlation Analysis
+
+Across all methods and mask types, the reference-based metrics are correlated but not interchangeable. On full-image measurements, LPIPS and PSNR have a strong negative correlation of -0.896, LPIPS and SSIM have a correlation of -0.798, and PSNR and SSIM have a positive correlation of 0.843. The same trend appears inside the hole region, with correlations of -0.845 for LPIPS versus PSNR, -0.664 for LPIPS versus SSIM, and 0.817 for PSNR versus SSIM.
+
+These correlations are directionally expected: lower LPIPS generally corresponds to higher PSNR and SSIM. However, the method rankings show that correlation alone does not make the metrics redundant. The baseline wins every LPIPS comparison, while BAR-RePaint wins most PSNR, SSIM, and FID comparisons. This means that LPIPS, pixel fidelity, structural similarity, and distribution-level realism emphasize different properties of the output. For this project, the disagreement is itself an important result: a boundary-aware resampling method may improve reconstruction and structural metrics while not necessarily improving LPIPS or subjective quality.
+
 ### Qualitative Results
+
+For qualitative inspection, we use comparison grids containing the reference image, the corrupted input, the baseline output, the latent RePaint output, and the BAR-RePaint output. For the CelebA-HQ benchmark, these grids can be recreated by rerunning the evaluation scripts. For the custom image set, the same procedure can be rerun if the same images and masks are supplied.
+
+Visual inspection is consistent with the quantitative results. For small or thin brush masks, all methods often preserve the surrounding face structure well, and the differences can be subtle. For larger masks, especially the half-image mask, the baseline can remain perceptually close according to LPIPS but may produce weaker structural agreement in the regenerated region. BAR-RePaint tends to preserve stronger structural consistency in these large-mask cases, which is reflected by its higher PSNR and SSIM scores.
+
+However, the half-mask examples also reveal a qualitative failure mode that is stronger than the aggregate metrics suggest. When half of the face is removed, the remaining context is often insufficient to recover identity, pose, lighting, and fine facial geometry. In several examples, the model does not merely produce a slightly different completion; it effectively fails the edit by hallucinating a different face, shifting facial structure, or producing an unnaturally flat filled region. This is especially visible in the half-mask comparison grids, where the generated right side may not align with the preserved left side even when the global score is not catastrophic.
 
 ## Discussion
 
+The experiments highlight a trade-off in latent resampling. Adding stochasticity during inference can help the model escape early commitments and improve reconstruction metrics, but it can also disturb the distribution learned by the pretrained inpainting pipeline. Uniform latent RePaint is the clearest example: it improves some brush-mask PSNR and SSIM scores, but its FID is consistently worse than the baseline and BAR-RePaint. This suggests that resampling strength must be controlled spatially as well as temporally.
+
+The exploratory sweep further shows that resampling strength is a sensitive parameter. The best seam and LPIPS settings in the custom-image sweep used low resampling strengths, while stronger settings tended to increase boundary variation. This supports the design choice of decaying resampling over time and stopping it before the final denoising steps, since the last part of the trajectory appears especially important for stabilizing local image details.
+
+The method can fail when this balance is wrong. Uniform RePaint can do worse than the baseline because it re-noises the entire masked region with no distinction between boundary and interior. This is especially risky near the seam, where even small changes in color, edge density, or texture are visible. BAR-RePaint can also underperform when the boundary-aware weights are too permissive, when the prompt drives the model toward content that does not match the surrounding image, or when the mask leaves too little context for the model to infer the missing structure. In these cases, extra stochasticity does not refine the output; it instead moves the sample away from the original image or away from the pretrained model's natural inpainting behavior.
+
+The half-mask setting is the clearest example of this limitation. It removes too much identity-defining information and asks the model to synthesize a large, semantically constrained region from weak context. Stable Diffusion inpainting can produce a plausible face, but plausibility is not the same as reconstruction. For this mask type, the method often behaves like unconstrained generation on the missing side, so improvements in PSNR or SSIM should be interpreted carefully: the output may still be visually unacceptable because the two halves do not form a coherent person.
+
+BAR-RePaint addresses this by reducing resampling near the mask boundary and increasing it toward the interior. This design is supported by the final center and half-mask results, where BAR-RePaint improves both PSNR and SSIM in the generated hole. These are exactly the settings where a distance-aware policy should matter most: there is a large interior region where exploration is useful, and a long boundary where excessive noise can create visible inconsistency.
+
+At the same time, the LPIPS results show that BAR-RePaint is not universally better. The baseline has the best LPIPS across all CelebA-HQ mask types and regions. One interpretation is that the pretrained inpainting model already produces outputs that are perceptually close to the reference distribution, while additional latent resampling changes details in ways that improve pixel or structural agreement but hurt feature-space similarity. Another possibility is that LPIPS, when computed against the original image, penalizes plausible alternative completions that differ from the exact ground truth.
+
+The metric correlation analysis reinforces this point. Although LPIPS, PSNR, and SSIM are strongly correlated overall, their rankings differ by method. Therefore, inpainting quality should not be summarized by a single score. For boundary-aware methods in particular, region-specific and boundary-sensitive evaluation remains important.
+
 ## Limitations
+
+The final quantitative evaluation is limited to CelebA-HQ face images and three synthetic mask types. This makes the experiment controlled, but it does not cover general object categories, natural scenes, text-guided semantic edits, or user-provided masks. The exploratory sweep includes a broader custom set of local images and masks, but it is still small, non-standard, and not meant to replace a benchmark dataset. The method should be tested on broader datasets before drawing conclusions about general-purpose inpainting.
+
+The final quantitative evaluation uses 100 images. This is enough to observe consistent trends across the tested masks, but a larger sample would give more reliable FID estimates and tighter confidence intervals. FID is especially sensitive to dataset size, so the reported values should be interpreted as comparative within this experiment rather than absolute claims about image quality.
+
+The current implementation uses fixed hyperparameters selected from a preliminary sweep. Different masks, prompts, schedulers, guidance scales, or model versions may require different values of `p`, `p_max`, `gamma`, and `stop_jump_frac`. The method can perform worse than the baseline when these values are not matched to the image and mask geometry, particularly for small masks, highly detailed boundaries, or prompts that encourage semantic changes beyond the masked content. BAR-RePaint also introduces extra sampling-time operations, so there is a runtime cost compared with the standard baseline.
+
+Finally, the final CelebA-HQ metric table reports LPIPS, PSNR, SSIM, and FID, while seam-specific metrics are reported for the exploratory sweep rather than for the full CelebA-HQ evaluation set. A stronger future evaluation would include final seam metrics on the same images used for the main quantitative comparison and directly compare those measurements with the global metrics.
+
+Future work should treat large masks, especially half-image masks, as a separate regime. Possible mitigations include lowering or disabling resampling near the final denoising steps, using a more conservative `p_max` for large masks, adding stronger structural conditioning such as face landmarks or edge maps, using identity-preserving guidance for face images, applying color and exposure matching after generation, or decomposing the task into a boundary-harmonization step followed by interior refinement. For half-face masks in particular, a face-aware prior or symmetry/landmark constraint may be necessary; boundary-aware resampling alone does not provide enough information to reconstruct the missing identity.
 
 ## Conclusion
 
+This project introduced BAR-RePaint, a boundary-aware latent resampling strategy for Stable Diffusion inpainting. The method keeps the pretrained inpainting model and scheduler fixed, but changes how stochastic resampling is applied inside the mask. Instead of using a uniform resampling strength, BAR-RePaint computes a distance-to-boundary map and applies weak or zero resampling near the boundary while allowing stronger exploration in the mask interior.
 
+The exploratory sweep on the custom images shows that seam quality is sensitive to the amount and timing of resampling, and that mild resampling can improve boundary metrics over the standard baseline in that setting. In the final CelebA-HQ evaluation, BAR-RePaint improves PSNR and SSIM on the larger center and half-image masks and achieves the best aggregate FID across all masks. The standard baseline remains strongest on LPIPS, and some RePaint settings perform worse than the baseline, showing that the proposed direction is useful but not a universal improvement. Overall, the results support the main hypothesis that mask geometry matters for latent diffusion inpainting: treating boundary and interior regions differently can improve important aspects of reconstruction quality, especially for larger missing regions.
 
+## References
 
-
-
-
-
-references
-
-1. Lugmayr, Andreas, et al. "Repaint: Inpainting using denoising diffusion probabilistic models." *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*. 2022.‏  
-2. Zheng, Candi, Yuan Lan, and Yang Wang. "LanPaint: Training-Free Diffusion Inpainting with Asymptotically Exact and Fast Conditional Sampling." *Transactions on Machine Learning Research*.‏  
-3. Mei, Kangfu, Nithin Gopalakrishnan Nai, and Vishal M. Patel. "Improving conditional diffusion models through re-noising from unconditional diffusion priors." *2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)*. IEEE, 2025.‏  
-4. Xu, Yilun, et al. "Restart sampling for improving generative processes." *Advances in Neural Information Processing Systems* 36 (2023): 76806-76838.‏  
+1. Lugmayr, Andreas, et al. "Repaint: Inpainting using denoising diffusion probabilistic models." *Proceedings of the IEEE/CVF conference on computer vision and pattern recognition*. 2022.‏
+2. Zheng, Candi, Yuan Lan, and Yang Wang. "LanPaint: Training-Free Diffusion Inpainting with Asymptotically Exact and Fast Conditional Sampling." *Transactions on Machine Learning Research*.‏
+3. Mei, Kangfu, Nithin Gopalakrishnan Nai, and Vishal M. Patel. "Improving conditional diffusion models through re-noising from unconditional diffusion priors." *2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)*. IEEE, 2025.‏
+4. Xu, Yilun, et al. "Restart sampling for improving generative processes." *Advances in Neural Information Processing Systems* 36 (2023): 76806-76838.‏
 5. Jiang, Shipeng, Jingwei Qu, and Bingyao Huang. "MAD-paint: Mask-Aware Diffusion Sampling for Image Inpainting." *Proceedings of the 2025 International Conference on Multimedia Retrieval*. 2025.‏
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-נקודות לדוח:
-
-* חישוב עבור מסכות מרובות בתמונה  
-* הכנסת דעיכה לעוצמת הרעש  
-* הפסקת ההרעשה בצעדים האחרונים  
-* מדדים שונים וקורלציה ביניהם
