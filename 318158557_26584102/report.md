@@ -20,7 +20,7 @@ Several follow-up works have explored alternative ways to improve diffusion-base
 
 In parallel, work such as **MAD-paint**<sup>[5]</sup> has highlighted the importance of mask geometry, showing that treating all masked pixels uniformly during sampling is suboptimal. By adapting noise schedules based on the distance to mask boundaries, these methods demonstrate improved boundary coherence and semantic plausibility.
 
-In contrast to prior approaches, our method does not modify the diffusion timeline or scheduler. Instead, we implement a latent space resampling strategy inspired by training-free latent diffusion samplers such as **LanPaint.** This resampling strategy (unlike **LanPaint**) injects controlled stochasticity during sampling via partial re-noising of latent variables, applied only within the masked region (inspired by **RePaint**). Furthermore, we introduce a boundary-aware resampling mechanism (inspired by **MAD-paint**) that modulates the strength of stochasticity based on the distance to the mask boundary, and is designed to preserve structural consistency near known regions while allowing greater flexibility in the interior. This approach enables seamless integration with existing Stable Diffusion inpainting pipelines and provides a simple yet effective extension to latent diffusion models.
+In contrast to prior approaches, our method does not modify the diffusion timeline or scheduler. Instead, we implement a latent space resampling strategy inspired by training-free latent diffusion samplers such as **LanPaint.** This resampling strategy (unlike **LanPaint**) injects controlled stochasticity during sampling via partial re-noising of latent variables, applied only within the masked region (inspired by **RePaint**). Furthermore, we introduce a boundary-aware resampling mechanism (inspired by **MAD-paint**) that modulates the strength of stochasticity based on the distance to the mask boundary, and is designed to preserve structural consistency near known regions while allowing greater flexibility in the interior. This made it easy to integrate with existing Stable Diffusion inpainting pipelines and provides a simple yet effective extension to latent diffusion models.
 
 ## Background
 
@@ -69,11 +69,11 @@ This baseline does not modify the sampling trajectory and does not introduce add
 
 ### Latent RePaint Baseline
 
-The second baseline is a RePaint-inspired latent resampling method. Unlike the original RePaint algorithm, which operates in pixel space and modifies the diffusion schedule through explicit jumps between timesteps, our implementation operates inside the latent space of Stable Diffusion and keeps the original scheduler unchanged.
+The second baseline is a RePaint-inspired latent resampling method. Our implementation operates inside the latent space of Stable Diffusion and keeps the original scheduler unchanged.
 
 At fixed intervals during inference, the current latent representation is partially re-noised at the current diffusion timestep. The re-noised latent is then blended back only inside the masked region. Formally, if $z_t$ is the current latent and $z_t^{noise}$ is the same latent after adding scheduler noise, the update inside the mask is an interpolation between the two states. The interpolation strength is controlled by a scalar parameter `p`.
 
-To avoid destabilizing the final denoising steps, resampling is applied only during an early portion of the sampling trajectory. In addition, the resampling strength can decay over time, so that stochastic exploration is stronger in earlier denoising steps and weaker near the end of generation. This produces a latent-space analogue of RePaint-style repeated refinement while remaining compatible with the Stable Diffusion inpainting pipeline.
+In our initial runs, the outputs looked foggy. So, to avoid destabilizing the final denoising steps, resampling is applied only during an early portion of the sampling trajectory. In addition, the resampling strength can decay over time, so that stochastic exploration is stronger in earlier denoising steps and weaker near the end of generation. This produces a latent-space analogue of RePaint-style repeated refinement while remaining compatible with the Stable Diffusion inpainting pipeline.
 
 ### Boundary-Aware Latent RePaint (BAR-RePaint)
 
@@ -106,8 +106,6 @@ During inference, BAR-RePaint applies the same temporal logic as the latent RePa
 All experiments were conducted using the Stable Diffusion 2 inpainting model (`sd2-community/stable-diffusion-2-inpainting`). The model operates in latent space and receives three inputs: an RGB image, a binary inpainting mask, and a text prompt. All images and masks were resized to `512 x 512` before inference. Masks follow the standard diffusers convention, where white pixels indicate the region to regenerate and black pixels indicate the region to preserve.
 
 We used two image sources. For the main controlled quantitative evaluation, we used images from the CelebA-HQ dataset (`korexyz/celeba-hq-256x256`). Each image was resized to `512 x 512` and evaluated under several mask types in order to test different inpainting scenarios. The mask set includes a centered square mask, a half-image mask, and a random brush-stroke mask. This gives both regular geometric masks and more irregular masks that better resemble free-form editing.
-
-The input to the inpainting pipeline was created by removing the masked region from the original image while keeping the unmasked context unchanged. The original image was used only as the reference image for evaluation metrics.
 
 The input to the inpainting pipeline was created by removing the masked region from the original image while keeping the unmasked context unchanged. The original image was used only as the reference image for evaluation metrics. The final CelebA-HQ evaluation uses an empty prompt and empty negative prompt, 50 denoising steps, and guidance scale 1.0. It uses 100 CelebA-HQ images, three mask types, and three compared methods, for a total of 900 generated images for LPIPS, PSNR, and SSIM. FID is computed per method and mask type over 100 generated images, and also over all 300 generated images per method.
 
@@ -143,7 +141,7 @@ Finally, we analyze correlations between LPIPS, PSNR, and SSIM in order to test 
 
 Before the final CelebA-HQ evaluation, we ran a larger exploratory sweep on the custom image set to study how the resampling parameters affect boundary quality. This sweep used 20 images, 6 masks, and 3 random seeds. For each generated sample, we computed seam gradient gap, Lab color gap across the boundary, total variation in a narrow seam band, edge-density gap, and LPIPS. Lower values are better for all metrics in this sweep.
 
-The sweep produced 360 baseline samples, 14,040 latent RePaint samples, and 21,600 BAR-RePaint samples. Averaged across all configurations in each method family, BAR-RePaint produced lower seam gradient gap, lower Lab color gap, lower edge-density gap, and lower LPIPS than the baseline and the full set of latent RePaint configurations:
+The sweep produced 360 baseline samples, 14,040 latent RePaint samples, and 21,600 BAR-RePaint samples. Averaged across all configurations in each method family, BAR-RePaint produced lower seam gradient gap, lower Lab color gap, lower edge-density gap, and lower LPIPS than the baseline and the full set of latent RePaint configurations (Arrows indicate whether lower or higher values are better):
 
 | Method family | Samples | Seam grad ↓ | Color gap ↓ | TV band ↓ | Edge gap ↓ | LPIPS masked ↓ |
 |---|---:|---:|---:|---:|---:|---:|
